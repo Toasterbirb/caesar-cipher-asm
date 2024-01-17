@@ -17,17 +17,15 @@ section .text
 
 _start:
 	; Make sure the user specified 2 arguments
-	pop rax					; Pop argc to rax
+	mov rax, [rsp]			; Get the argument count
 	cmp rax, MIN_ARG_COUNT	; Check the argument count
 	jne _print_usage		; If the arg count doesn't match, print usage and quit
 
-	pop rax					; Pop the argv[0] path argument that is useless in this program
-
-	pop rax					; Pop the shift amount to rax
+	lea rax, [rsp+16]		; Get the shift amount string pointer to rax
 	call _str_to_int		; Convert the shift string into a number
 	mov r9, rax				; Copy the shift amount to r9
 
-	pop r8					; Pop the target string to r8
+	lea r8, [rsp+24]		; Get the target string pointer to r8
 	call _shift_chars		; Shift the characters with the caesar cipher algorithm
 
 	call _print				; Print the result string that should be in rax at this point
@@ -36,7 +34,7 @@ _start:
 
 ; Prints the program usage and quits with exit code 1
 _print_usage:
-	mov rax, arg_count_error
+	lea rax, arg_count_error
 	call _print
 	exit 1
 
