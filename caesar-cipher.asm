@@ -1,11 +1,11 @@
 ; Macros
 %macro exit 1
-	mov rax, 1		; 'Exit' syscall
-	mov rbx, %1		; exit code
-	int 0x80
+	mov rax, 60		; 'Exit' syscall
+	mov rdi, %1		; exit code
+	syscall
 %endmacro
 
-SYS_WRITE equ 4
+SYS_WRITE equ 1
 FILE_STDOUT equ 1
 MIN_ARG_COUNT equ 3
 
@@ -28,7 +28,7 @@ _start:
 	lea r8, [rsp+24]		; Get the target string pointer to r8
 	call _shift_chars		; Shift the characters with the caesar cipher algorithm
 
-	call _print				; Print the result string that should be in rax at this point
+	;call _print				; Print the result string that should be in rax at this point
 
 	exit 0
 
@@ -68,9 +68,9 @@ _print:
 
 	; Print the string
 	mov rax, SYS_WRITE
-	mov rbx, FILE_STDOUT
-	pop rcx
-	int 0x80
+	mov rdi, FILE_STDOUT
+	pop rsi
+	syscall
 	ret
 
 ; Convert a string to integer value
