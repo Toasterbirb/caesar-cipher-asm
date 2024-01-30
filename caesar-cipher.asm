@@ -5,12 +5,37 @@
 	syscall
 %endmacro
 
+%macro print_newline 0
+	; Store registers
+	push rax
+	push rdi
+	push rsi
+	push rdx
+
+	; Print the char
+	mov rax, 1					; WRITE syscall
+	mov rdi, 1					; STDOUT
+	mov rsi, newline_char		; The char to print
+	mov rdx, 1					; Set length to 1
+	syscall
+
+	; Restore registers
+	pop rdx
+	pop rsi
+	pop rdi
+	pop rax
+%endmacro
+
 SYS_WRITE equ 1
 FILE_STDOUT equ 1
 MIN_ARG_COUNT equ 3
 
 section .data
 	arg_count_error db "Usage: ./caesar-cipher [rotation amount] [text]", 0xA, 0
+	newline_char db 0xA
+
+section .bss
+	print_buffer resb 1		; Buffer for printing singular characters
 
 section .text
 	global _start
@@ -21,14 +46,16 @@ _start:
 	cmp rax, MIN_ARG_COUNT	; Check the argument count
 	jne _print_usage		; If the arg count doesn't match, print usage and quit
 
-	lea rax, [rsp+16]		; Get the shift amount string pointer to rax
+	mov rax, [rsp+16]		; Get the shift amount string pointer to rax
 	call _str_to_int		; Convert the shift string into a number
 	mov r9, rax				; Copy the shift amount to r9
 
-	lea r8, [rsp+24]		; Get the target string pointer to r8
+	mov r8, [rsp+24]		; Get the target string pointer to r8
 	call _shift_chars		; Shift the characters with the caesar cipher algorithm
 
 	;call _print				; Print the result string that should be in rax at this point
+
+	print_newline
 
 	exit 0
 
@@ -72,6 +99,18 @@ _print:
 	pop rsi
 	syscall
 	ret
+
+; Print a singular character from the print_buffer
+; input: pointer to the char in rax
+; output: char printed to stdout
+_print_char:
+	mov rsi, rax
+	mov rax, SYS_WRITE
+	mov rdi, FILE_STDOUT
+	mov rdx, 1
+	syscall
+	ret
+
 
 ; Convert a string to integer value
 ; input: pointer to string in rax
@@ -118,16 +157,27 @@ _shift_chars:
 	xor rcx, rcx		; Use rcx as the loop interator
 
 	_shift_chars_loop:
+		call _shift_lowercase	; Shift lowercase chars, if any
+		;call _shift_uppercase	; Shift uppercase chars, if any
+
+		; Store the registers
+		push rcx
+
+		; Print the character
+		xor rax, rax
+		mov al, r8b
+		call _print_char
+
+		; Restore the registers
+		pop rcx
+
 		inc rcx					; Increment the loop iterator
 		inc r8					; Move to the next character
-
-		call _shift_lowercase	; Shift lowercase chars, if any
-		call _shift_uppercase	; Shift uppercase chars, if any
 
 		cmp rcx, r10			; Check if we are at the end of the string
 		jne _shift_chars_loop	; Loop around
 
-	pop rax			; Restore the string pointer
+	pop rax				; Restore the string pointer
 
 	ret
 
@@ -150,7 +200,10 @@ _shift_lowercase:
 	cmp byte [r8], 'z'
 	jg _return_false
 
-	add r8b, r9b		; Shift the character
+	xor r11, r11
+	mov r11b, r8b
+	add r11, r9
+	add r8b, r11b		; Shift the character
 
 	jmp _return_true	; The char was shifted, so return true
 
