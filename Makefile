@@ -8,3 +8,5 @@ caesar-cipher: caesar-cipher.o
 
 clean:
 	rm -f *.o caesar-cipher
+
+.PHONY: clean
