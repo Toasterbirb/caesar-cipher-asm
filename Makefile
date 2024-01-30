@@ -9,4 +9,7 @@ caesar-cipher: caesar-cipher.o
 clean:
 	rm -f *.o caesar-cipher
 
-.PHONY: clean
+test: caesar-cipher
+	./caesar-cipher 1 "abcABC"
+
+.PHONY: clean test
