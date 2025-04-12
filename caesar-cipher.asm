@@ -13,14 +13,6 @@
 	syscall
 %endmacro
 
-%macro read 2
-	mov rsi, %1
-	mov rdx, %2
-	mov rax, 0
-	mov rdi, 0
-	syscall
-%endmacro
-
 section .data
 	arg_count_error db "usage: ./caesar-cipher [rotation amount] [text]", 0xa, 0
 	arg_count_error_len equ $-arg_count_error
