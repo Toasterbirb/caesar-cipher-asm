@@ -154,12 +154,6 @@ encode:
 	xor rax, rax
 	xor rcx, rcx
 
-	; some constant registers for cmovs
-	mov r10, 'A'
-	mov r11, 'Z'
-	mov r12, 'a'
-	mov r13, 'z'
-
 	.loop:
 		; stop when we come across a null byte
 		mov al, [rdi+rcx]
