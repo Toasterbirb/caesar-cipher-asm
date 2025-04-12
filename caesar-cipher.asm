@@ -5,219 +5,236 @@
 	syscall
 %endmacro
 
-%macro print_newline 0
-	; Store registers
-	push rax
-	push rdi
-	push rsi
-	push rdx
-
-	; Print the char
-	mov rax, 1					; WRITE syscall
-	mov rdi, 1					; STDOUT
-	mov rsi, newline_char		; The char to print
-	mov rdx, 1					; Set length to 1
+%macro print 2
+	mov rsi, %1
+	mov rdx, %2
+	mov rax, 1
+	mov rdi, 1
 	syscall
-
-	; Restore registers
-	pop rdx
-	pop rsi
-	pop rdi
-	pop rax
 %endmacro
 
-SYS_WRITE equ 1
-FILE_STDOUT equ 1
-MIN_ARG_COUNT equ 3
+%macro read 2
+	mov rsi, %1
+	mov rdx, %2
+	mov rax, 0
+	mov rdi, 0
+	syscall
+%endmacro
 
 section .data
-	arg_count_error db "Usage: ./caesar-cipher [rotation amount] [text]", 0xA, 0
-	newline_char db 0xA
+	arg_count_error db "usage: ./caesar-cipher [rotation amount] [text]", 0xa, 0
+	arg_count_error_len equ $-arg_count_error
+	rot_amount_error db "only values between -26 and 26 are allowed for the rotation amount", 0xa
+	rot_amount_error_len equ $-rot_amount_error
+	newline_char db 0xa
 
 section .bss
-	print_buffer resb 1		; Buffer for printing singular characters
+	rotation_amount_ptr resq 1
+	text_ptr resq 1
 
 section .text
 	global _start
+	extern atoi
+
+MIN_ARG_COUNT equ 3
 
 _start:
-	; Make sure the user specified 2 arguments
-	mov rax, [rsp]			; Get the argument count
-	cmp rax, MIN_ARG_COUNT	; Check the argument count
-	jne _print_usage		; If the arg count doesn't match, print usage and quit
+	; check arg count
+	cmp qword [rsp], MIN_ARG_COUNT
+	jne print_usage_and_exit
 
-	mov rax, [rsp+16]		; Get the shift amount string pointer to rax
-	call _str_to_int		; Convert the shift string into a number
-	mov r9, rax				; Copy the shift amount to r9
+	; get pointers to the rotation amount and the text
+	mov rax, [rsp+16]
+	mov [rotation_amount_ptr], rax
 
-	mov r8, [rsp+24]		; Get the target string pointer to r8
-	call _shift_chars		; Shift the characters with the caesar cipher algorithm
+	mov rax, [rsp+24]
+	mov [text_ptr], rax
 
-	;call _print				; Print the result string that should be in rax at this point
+	; convert the rotation amount string into a number
+	mov rdi, [rotation_amount_ptr]
+	call stoi
 
-	print_newline
+	; check if we are within the bounds of allowed rotation amounts
+	cmp rax, -26
+	jl print_rot_amount_error_and_exit
+
+	cmp rax, 26
+	jg print_rot_amount_error_and_exit
+
+	; do the character shifting
+	mov rdi, [text_ptr]
+	mov rsi, rax
+	call encode
+
+	; print the result
+	mov rdi, [text_ptr]
+	call strlen
+	print [text_ptr], rax
+	print newline_char, 1
 
 	exit 0
 
-; Prints the program usage and quits with exit code 1
-_print_usage:
-	lea rax, arg_count_error
-	call _print
+print_usage_and_exit:
+	print arg_count_error, arg_count_error_len
 	exit 1
 
-; Get the length of a null-terminated string.
-; The string will go MIA so push it to the stack before calling this
-; input: pointer to the string in rax
-; output: string length in rax
-_strlen:
-	xor rbx, rbx	; Count the string length into rbx
+print_rot_amount_error_and_exit:
+	print rot_amount_error, rot_amount_error_len
+	exit 1
 
-	_strlen_loop:
-		inc rax			; Move to the next char
-		inc rbx			; Increment the char counter
-		mov cl, [rax]	; Move the current char to cl
-		cmp cl, 0		; Check if we are at the end of the string
-		jnz _strlen_loop
+; figure out the length of a null terminated string
+; usage: [char* str]
+; return: int
+strlen:
+	xor rcx, rcx
+	.loop:
+		mov al, [rdi+rcx]
+		test al, al
+		jz .ret
+		inc rcx
+		jmp .loop
 
-	mov rax, rbx	; Move the string length to rax
+.ret:
+	mov rax, rcx
 	ret
 
-; Print a string
-; input: pointer to the string in rax
-; output: string printed to stdout
-_print:
-	; Store the string for later
-	push rax
+; convert a string into an integer
+; usage: [char* number]
+; return: int
+stoi:
+	push rbp
+	mov rbp, rsp
+	sub rsp, 1
 
-	; Get the string length to rdx
-	call _strlen
-	mov rdx, rax
+	; set this byte to 1 if the number is negative
+	mov byte [rbp-1], 0
 
-	; Print the string
-	mov rax, SYS_WRITE
-	mov rdi, FILE_STDOUT
-	pop rsi
-	syscall
-	ret
+	call strlen
+	mov r8, rax
+	xor rax, rax
+	xor r10, r10
 
-; Print a singular character from the print_buffer
-; input: pointer to the char in rax
-; output: char printed to stdout
-_print_char:
-	mov rsi, rax
-	mov rax, SYS_WRITE
-	mov rdi, FILE_STDOUT
-	mov rdx, 1
-	syscall
-	ret
+	mov r9, 10
 
+	.loop:
+		mov r10b, [rdi]
 
-; Convert a string to integer value
-; input: pointer to string in rax
-; output: integer in rax
-_str_to_int:
-	push rax		; Store the string for later use
-	call _strlen	; Get the string length
-	mov r8, rax		; Store the string length to r8
+		; check if the character is a '-'
+		; if yes, the number is a negative number and we also shouldn't
+		; try to interpret the character as a number
+		cmp r10b, '-'
+		je .reg_negative_num
 
-	pop rbx			; Pop the string to rbx
-	xor rax, rax	; Set rax to zero
-
-	mov r9, 10		; Use 10 as a multiplier to shift numbers to left
-	_str_to_int_loop:
-		; Add the current char to rax
-		xor rcx, rcx
-		add cl, [rbx]
-		add rax, rcx
-		sub rax, '0'	; Convert the ASCII digit into a number
+		sub r10, '0'
+		add rax, r10
 
 		dec r8
-		cmp r8, 1		; Check if the loop should be over
-		jne _str_to_int_ret
+		cmp r8, 0
 
-		mul r9					; Multiply the number with 10 to shift the digits to the left
-		inc rbx					; Move to the next char
-		jmp _str_to_int_loop	; Loop
+		jz .loop_end
 
-	_str_to_int_ret:
+		mul r9
+
+		inc rdi
+		jmp .loop
+
+	.reg_negative_num:
+		mov byte [rbp-1], 1
+		inc rdi
+		dec r8
+		jmp .loop ; continue looping
+
+	.loop_end:
+		; handle negative numbers
+		cmp byte [rbp-1], 0
+		je .ret
+		neg rax
+
+	.ret:
+		mov rsp, rbp
+		pop rbp
 		ret
 
-; Shift letters by a given amount
-; input: pointer to the string in r8 and shift amount in r9b
-; output: the result string will be stored to rax
-_shift_chars:
-	; Store the string pointer to the stack
-	push r8
+; run the caesar cipher on a block of null terminated text
+; usage: [char* str, int shift_amount]
+; return: void
+encode:
+	xor rax, rax
+	xor rcx, rcx
 
-	; Get the string length
-	mov rax, r8
-	call _strlen
-	mov r10, rax
+	; some constant registers for cmovs
+	mov r10, 'A'
+	mov r11, 'Z'
+	mov r12, 'a'
+	mov r13, 'z'
 
-	xor rcx, rcx		; Use rcx as the loop interator
+	.loop:
+		; stop when we come across a null byte
+		mov al, [rdi+rcx]
+		test al, al
+		jz .ret
 
-	_shift_chars_loop:
-		call _shift_lowercase	; Shift lowercase chars, if any
-		;call _shift_uppercase	; Shift uppercase chars, if any
+		; skip anything that is before 'A' and after 'z'
+		cmp al, 'A'
+		jl .loop_continue
 
-		; Store the registers
-		push rcx
+		cmp al, 'z'
+		jg .loop_continue
 
-		; Print the character
-		xor rax, rax
-		mov al, r8b
-		call _print_char
+		; skip chars between 'Z' and 'a'
+		cmp al, 'Z'
+		setg bl
+		cmp al,  'a'
+		setl bh
+		xor bl, bh
+		jz .loop_continue
 
-		; Restore the registers
-		pop rcx
+		; set rbx to 1 if the character is lowercase, otherwise set it to 0 (uppercase)
+		xor rbx, rbx
+		cmp al, 'a'
+		setge bl
 
-		inc rcx					; Increment the loop iterator
-		inc r8					; Move to the next character
+		; shift the character
+		add al, sil
 
-		cmp rcx, r10			; Check if we are at the end of the string
-		jne _shift_chars_loop	; Loop around
+		; handle wrapping
+		test bl, bl
+		jnz .lowercase_wrap
 
-	pop rax				; Restore the string pointer
+		.uppercase_wrap:
+			; overflow
+			mov rdx, rax
+			sub rdx, 'Z' - 'A' + 1
+			cmp rax, 'Z'
+			cmovg rax, rdx
 
-	ret
+			; underflow
+			mov rdx, rax
+			add rdx, 'Z' - 'A' + 1
+			cmp rax, 'A'
+			cmovl rax, rdx
 
-_return_true:
-	mov rax, 1
-	ret
+			jmp .loop_continue
 
-_return_false:
-	mov rax, 0
-	ret
+		.lowercase_wrap:
+			; overflow
+			mov rdx, rax
+			sub rdx, 'z' - 'a' + 1
+			cmp rax, 'z'
+			cmovg rax, rdx
 
-; Shift lowercase letters
-; returns 1 if a shift happened
-_shift_lowercase:
-	; Check if the char is < 'a'
-	cmp byte [r8], 'a'
-	jl _return_false
+			; underflow
+			mov rdx, rax
+			add rdx, 'z' - 'a' + 1
+			cmp rax, 'a'
+			cmovl rax, rdx
 
-	; Check if the char is > 'z'
-	cmp byte [r8], 'z'
-	jg _return_false
+			jmp .loop_continue
 
-	xor r11, r11
-	mov r11b, r8b
-	add r11, r9
-	add r8b, r11b		; Shift the character
+		.loop_continue:
+			mov [rdi+rcx], al
+			inc rcx
+			jmp .loop
 
-	jmp _return_true	; The char was shifted, so return true
-
-
-; Shift uppercase letters
-; returns 1 if a shift happened
-_shift_uppercase:
-	; Check if the char is < 'A'
-	cmp byte [r8], 'A'
-	jl _return_false
-
-	; Check if the char is > 'Z'
-	cmp byte [r8], 'Z'
-	jg _return_false
-
-
-	jmp _return_true	; The char was shifted, so return true
+	.ret:
+		ret
