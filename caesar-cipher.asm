@@ -94,35 +94,25 @@ strlen:
 ; usage: [char* number]
 ; return: int
 stoi:
-	push rbp
-	mov rbp, rsp
-	sub rsp, 1
-
 	; set this byte to 1 if the number is negative
-	mov byte [rbp-1], 0
+	xor r10b, r10b
 
-	call strlen
-	mov r8, rax
 	xor rax, rax
-	xor r10, r10
-
 	mov r9, 10
 
 	; check if the first character is a '-'
 	; if yes, the number is a negative number and we also shouldn't
 	; try to interpret the character as a number
-	mov r10b, [rdi]
-	cmp r10b, '-'
+	mov dl, [rdi]
+	cmp dl, '-'
 	je .reg_negative_num
 
 	.loop:
-		mov r10b, [rdi]
-		sub r10, '0'
-		add rax, r10
+		mov dx, word [rdi]
+		sub dl, '0'
+		add al, dl
 
-		dec r8
-		cmp r8, 0
-
+		test dh, dh
 		jz .loop_end
 
 		mul r9
@@ -131,20 +121,17 @@ stoi:
 		jmp .loop
 
 	.reg_negative_num:
-		mov byte [rbp-1], 1
+		mov r10b, 1
 		inc rdi
-		dec r8
 		jmp .loop ; start looping
 
 	.loop_end:
 		; handle negative numbers
-		cmp byte [rbp-1], 0
-		je .ret
+		test r10b, r10b
+		jz .ret
 		neg rax
 
 	.ret:
-		mov rsp, rbp
-		pop rbp
 		ret
 
 ; run the caesar cipher on a block of null terminated text
