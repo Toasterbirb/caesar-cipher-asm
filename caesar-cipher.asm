@@ -163,7 +163,6 @@ encode:
 		jz .loop_continue
 
 		; set rbx to 1 if the character is lowercase, otherwise set it to 0 (uppercase)
-		xor rbx, rbx
 		cmp al, 'a'
 		setge bl
 
