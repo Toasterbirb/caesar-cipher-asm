@@ -108,15 +108,15 @@ stoi:
 
 	mov r9, 10
 
+	; check if the first character is a '-'
+	; if yes, the number is a negative number and we also shouldn't
+	; try to interpret the character as a number
+	mov r10b, [rdi]
+	cmp r10b, '-'
+	je .reg_negative_num
+
 	.loop:
 		mov r10b, [rdi]
-
-		; check if the character is a '-'
-		; if yes, the number is a negative number and we also shouldn't
-		; try to interpret the character as a number
-		cmp r10b, '-'
-		je .reg_negative_num
-
 		sub r10, '0'
 		add rax, r10
 
@@ -134,7 +134,7 @@ stoi:
 		mov byte [rbp-1], 1
 		inc rdi
 		dec r8
-		jmp .loop ; continue looping
+		jmp .loop ; start looping
 
 	.loop_end:
 		; handle negative numbers
